@@ -1259,13 +1259,11 @@ do_type_check_expr(Env, {var, P, Var}) ->
             throw({unknown_variable, P, Var})
     end;
 do_type_check_expr(Env, {match, _, Pat, Expr}) ->
-    io:format(user, "DEBUG: do_type_check_expr, start~n", []),
     {Ty, VarBinds, Cs} = type_check_expr(Env, Expr),
     NormTy = normalize(Ty, Env#env.tenv),
     {[_PatTy], [UBoundNorm], Env2, Cs2} =
             ?throw_orig_type(add_types_pats([Pat], [NormTy], Env#env.tenv, VarBinds, capture_vars),
                              Ty, NormTy),
-    io:format(user, "DEBUG: do_type_check_expr, UBoundNorm = ~p~n", [UBoundNorm]),
     UBound = case UBoundNorm of NormTy -> Ty;
                                 _Other -> UBoundNorm end,
     {UBound, Env2, constraints:combine(Cs,Cs2)};
@@ -3110,7 +3108,6 @@ check_clause(Env, ArgsTy, ResTy, C = {clause, P, Args, Guards, Block}, Caps) ->
     ?verbose(Env, "~sChecking clause :: ~s~n", [gradualizer_fmt:format_location(C, brief), typelib:pp_type(ResTy)]),
     case {length(ArgsTy), length(Args)} of
         {L, L} ->
-            io:format(user, "DEBUG: check_clause, begin~n", []),
             {PatTys, _UBounds, VEnv2, Cs1} =
                 add_types_pats(Args, ArgsTy, Env#env.tenv, Env#env.venv, Caps),
             EnvNew      = Env#env{ venv =  VEnv2 },
@@ -3529,12 +3526,9 @@ add_types_pats([], [], _TEnv, VEnv, PatTysAcc, UBoundsAcc, CsAcc) ->
      VEnv, constraints:combine(CsAcc)};
 add_types_pats([Pat | Pats], [Ty | Tys], TEnv, VEnv, PatTysAcc, UBoundsAcc, CsAcc) ->
     NormTy = normalize(Ty, TEnv),
-%%    io:format(user, "DEBUG: add_type_pats, NormTy = ~p~n", [NormTy]),
     {PatTyNorm, UBoundNorm, VEnv2, Cs1} =
         ?throw_orig_type(add_type_pat(Pat, NormTy, TEnv, VEnv),
                          Ty, NormTy),
-    io:format(user, "DEBUG: add_type_pats, PatTyNorm = ~p~n", [PatTyNorm]),
-    io:format(user, "DEBUG: add_type_pats, UBoundNorm = ~p~n", [UBoundNorm]),
     %% De-normalize the returned types if they are the type checked against.
     PatTy  = case PatTyNorm  of NormTy -> Ty;
                                 _      -> PatTyNorm end,

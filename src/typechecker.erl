@@ -946,12 +946,19 @@ infer_literal_string(Str) ->
     end.
 
 expect_tuple_type({type, _, tuple, any}, _N) ->
+    io:format(user, "DEBUG, expect_tuple_type, any~n", []),
     any;
 expect_tuple_type({type, _, tuple, Tys}, N) when length(Tys) == N ->
+    io:format(user, "DEBUG, expect_tuple_type, same~n", []),
     {elem_ty, Tys, constraints:empty()};
 expect_tuple_type(?top() = TermTy, N) ->
+    io:format(user, "DEBUG, expect_tuple_type, top~n", []),
     {elem_ty, lists:duplicate(N, TermTy), constraints:empty()};
+expect_tuple_type({ann_type, _, [_, Ty]}, N) ->
+    io:format(user, "DEBUG, expect_tuple_type, ann~n", []),
+    expect_tuple_type(Ty, N);
 expect_tuple_type(Union = {type, _, union, UnionTys}, N) ->
+    io:format(user, "DEBUG, expect_tuple_type, union~n", []),
     {Tyss, Cs} =
         expect_tuple_union(UnionTys, [], constraints:empty(), no_any, N),
     case Tyss of
@@ -963,6 +970,7 @@ expect_tuple_type(Union = {type, _, union, UnionTys}, N) ->
             {elem_tys, Tyss, Cs}
     end;
 expect_tuple_type({var, _, Var}, N) ->
+    io:format(user, "DEBUG, expect_tuple_type, var~n", []),
     TyVars = [ new_type_var() || _ <- lists:seq(1,N) ],
     {elem_ty
     ,[ {var, erl_anno:new(0), TyVar} || TyVar <- TyVars ]
@@ -1115,33 +1123,57 @@ expect_fun_type_union(Env, [Ty|Tys]) ->
             [TyOut | expect_fun_type_union(Env, Tys)]
     end.
 
-expect_record_type(Record, {type, _, record, [{atom, _, Name}]}, _TEnv) ->
-    if Record == Name ->
-         {ok, constraints:empty()};
-       true ->
-         type_error
+expect_record_type({user_type, _, record, []}, _Record, _TEnv) ->
+    any;
+expect_record_type({type, _, record, [{atom, _, Name}]}, Record, TEnv) ->
+    io:format(user, "DEBUG: expect_record_type, Record = ~p~n", [Record]),
+    io:format(user, "DEBUG: expect_record_type, Name = ~p~n", [Name]),
+    case maps:is_key(Name, TEnv#tenv.records) of
+        true when Record == Name ->
+            RecTy = maps:get(Name, TEnv#tenv.records),
+            io:format(user, "DEBUG: expect_record_type, RecTy = ~p~n", [RecTy]),
+            {elem_ty, RecTy, constraints:empty()()};
+        _ ->
+            type_error
     end;
-expect_record_type(_Record, {type, _, tuple, any}, _TEnv) ->
-    {ok, constraints:empty()};
-expect_record_type(_Record, ?top(), _TEnv) ->
-    {ok, constraints:empty()};
-expect_record_type(Record, {type, _, union, Tys}, TEnv) ->
-    expect_record_union(Record, Tys, TEnv);
-expect_record_type(Record, {var, _, Var}, _TEnv) ->
-    {ok, constraints:add_var(Var,
-           constraints:upper(Var, type_record(Record)))};
-expect_record_type(_, _, _) ->
-    type_error.
+expect_record_type(?top() = TermTy, _Record, _TEnv) ->
+    {elem_ty, TermTy, constraints:empty()};
+expect_record_type({ann_type, _, [_, Ty]}, Record, TEnv) ->
+    expect_record_type(Ty, Record, TEnv);
+expect_record_type(Union = {type, _, union, UnionTys}, Record, TEnv) ->
+    {Tyss, Cs} =
+        expect_record_union(UnionTys, [], constraints:empty(), no_any, Record, TEnv),
+    case Tyss of
+        [] ->
+            {type_error, Union};
+        [Tys] ->
+            {elem_ty, Tys, Cs};
+        _ ->
+            {elem_tys, Tyss, Cs}
+    end;
+expect_record_type({var, _, Var}, Record, _TEnv) ->
+    {elem_ty
+    , {var, erl_anno:new(0), Var}
+    , constraints:add_var(Var,
+        constraints:upper(Var, {record, erl_anno:new(0), Record}))};
+expect_record_type(_, Ty, _) ->
+    {type_error, Ty}.
 
-expect_record_union(Record, [Ty | Tys], TEnv) ->
-    case expect_record_type(Record, Ty, TEnv) of
-      type_error ->
-        expect_record_union(Record, Tys, TEnv);
-      Res ->
-        Res
+expect_record_union([Ty | Tys], AccTy, AccCs, Any, Record, TEnv) ->
+    case expect_record_type(Ty, Record, TEnv) of
+        {type_error, _} ->
+            expect_record_union(Tys, AccTy, AccCs, Any, Record, TEnv);
+        any ->
+            expect_record_union(Tys, any, AccTy, AccCs, Record, TEnv);
+        {elem_ty, TTy, Cs} ->
+            expect_tuple_union(Tys, [TTy | AccTy], constraints:combine(Cs, AccCs), Any, Record, TEnv);
+        {elem_tys, TTys, Cs} ->
+            expect_tuple_union(Tys, TTys ++ AccTy, constraints:combine(Cs, AccCs), Any, Record, TEnv)
     end;
-expect_record_union(_Record, [], _TEnv) ->
-    type_error.
+expect_record_union(_Record, [], _TEnv, any, AccTy, AccCs) ->
+    {[ type(any) | AccTy], AccCs};
+expect_record_union(_Record, [], _TEnv, _NoAny, AccTy, AccCs) ->
+    {AccTy, AccCs}.
 
 -spec new_type_var() -> constraints:var().
 new_type_var() ->
@@ -2080,7 +2112,7 @@ do_type_check_expr_in(Env, ResTy, {map, _, Expr, Assocs} = MapUpdate) ->
 %% Records
 do_type_check_expr_in(Env, ResTy, {record, Anno, Name, Fields} = Record) ->
     Rec = get_record_fields(Name, Anno, Env#env.tenv),
-    case expect_record_type(Name, ResTy, Env#env.tenv) of
+    case expect_record_type(ResTy, Name, Env#env.tenv) of
       type_error ->
             throw({type_error,
                    Record,
@@ -2092,7 +2124,7 @@ do_type_check_expr_in(Env, ResTy, {record, Anno, Name, Fields} = Record) ->
     end;
 do_type_check_expr_in(Env, ResTy, {record, Anno, Exp, Name, Fields} = Record) ->
     RecordTy = {type, erl_anno:new(0), record, [{atom, erl_anno:new(0), Name}]},
-    case expect_record_type(Name, ResTy, Env#env.tenv) of
+    case expect_record_type(ResTy, Name, Env#env.tenv) of
       type_error ->
         throw({type_error,
                Record,
@@ -3108,6 +3140,7 @@ check_clause(Env, ArgsTy, ResTy, C = {clause, P, Args, Guards, Block}, Caps) ->
     ?verbose(Env, "~sChecking clause :: ~s~n", [gradualizer_fmt:format_location(C, brief), typelib:pp_type(ResTy)]),
     case {length(ArgsTy), length(Args)} of
         {L, L} ->
+            io:format(user, "DEBUG: check_clause, ArgsTy = ~p~n", [[typelib:remove_pos(ArgTy) || ArgTy <- ArgsTy]]),
             {PatTys, _UBounds, VEnv2, Cs1} =
                 add_types_pats(Args, ArgsTy, Env#env.tenv, Env#env.venv, Caps),
             EnvNew      = Env#env{ venv =  VEnv2 },
@@ -3689,12 +3722,19 @@ add_type_pat({bin, _P, BinElements} = Bin, Ty, TEnv, VEnv) ->
                     BinElements),
     {type(none), BinTy, NewVEnv, Cs};
 add_type_pat({record, P, Record, Fields}, Ty, TEnv, VEnv) ->
-    case expect_record_type(Record, Ty, TEnv) of
-        type_error -> throw({type_error, record_pattern, P, Record, Ty});
-        {ok, Cs1} ->
+    case expect_record_type(Ty, Record, TEnv) of
+        any ->
+            {type(none)
+            ,Ty
+            ,union_var_binds([add_any_types_pat(Field, VEnv) || Field <- Fields], TEnv)
+            ,constraints:empty()};
+        {elem_ty, Tys, Cs1} ->
             {VEnv2, Cs2} = add_type_pat_fields(Fields, Record, TEnv, VEnv),
+            io:format(user, "DEBUG, add_type_pat record, VEnv2 = ~p~n", [VEnv2]),
             RecTy = {type, erl_anno:new(0), record, [{atom, erl_anno:new(0), Record}]},
-            {type(none), RecTy, VEnv2, constraints:combine(Cs1, Cs2)}
+            {type(none), RecTy, VEnv2, constraints:combine(Cs1, Cs2)};
+        {type_error, _Type} ->
+            throw({type_error, record_pattern, P, Record, Ty});
     end;
 add_type_pat({map, _, _} = MapPat, {var, _, Var} = TyVar, _TEnv, VEnv) ->
     %% FIXME this is a quite rudimentary implementation
@@ -4162,6 +4202,7 @@ type_check_forms(Forms, Opts) ->
         lists:foldr(
           fun (Function, Errors) when Errors =:= [];
                                       not StopOnFirstError ->
+                        io:format(user, "DEBUG: BEGIN----------------------------------------------~n", []),
                         try type_check_function(Env, Function) of
                             {_VarBinds, _Cs} ->
                                 Errors

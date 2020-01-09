@@ -1124,6 +1124,7 @@ expect_fun_type_union(Env, [Ty|Tys]) ->
     end.
 
 expect_record_type({user_type, _, record, []}, _Record, _TEnv) ->
+    io:format(user, "DEBUG, expect_record_type, any~n", []),
     any;
 expect_record_type({type, _, record, [{atom, _, Name}]}, Record, TEnv) ->
     io:format(user, "DEBUG: expect_record_type, Record = ~p~n", [Record]),
@@ -1132,15 +1133,18 @@ expect_record_type({type, _, record, [{atom, _, Name}]}, Record, TEnv) ->
         true when Record == Name ->
             RecTy = maps:get(Name, TEnv#tenv.records),
             io:format(user, "DEBUG: expect_record_type, RecTy = ~p~n", [RecTy]),
-            {elem_ty, RecTy, constraints:empty()()};
+            {elem_ty, RecTy, constraints:empty()};
         _ ->
             type_error
     end;
 expect_record_type(?top() = TermTy, _Record, _TEnv) ->
+    io:format(user, "DEBUG, expect_record_type, top~n", []),
     {elem_ty, TermTy, constraints:empty()};
 expect_record_type({ann_type, _, [_, Ty]}, Record, TEnv) ->
+    io:format(user, "DEBUG, expect_record_type, ann~n", []),
     expect_record_type(Ty, Record, TEnv);
 expect_record_type(Union = {type, _, union, UnionTys}, Record, TEnv) ->
+    io:format(user, "DEBUG, expect_record_type, union~n", []),
     {Tyss, Cs} =
         expect_record_union(UnionTys, [], constraints:empty(), no_any, Record, TEnv),
     case Tyss of
@@ -1152,6 +1156,7 @@ expect_record_type(Union = {type, _, union, UnionTys}, Record, TEnv) ->
             {elem_tys, Tyss, Cs}
     end;
 expect_record_type({var, _, Var}, Record, _TEnv) ->
+    io:format(user, "DEBUG, expect_record_type, var~n", []),
     {elem_ty
     , {var, erl_anno:new(0), Var}
     , constraints:add_var(Var,
@@ -1166,9 +1171,9 @@ expect_record_union([Ty | Tys], AccTy, AccCs, Any, Record, TEnv) ->
         any ->
             expect_record_union(Tys, any, AccTy, AccCs, Record, TEnv);
         {elem_ty, TTy, Cs} ->
-            expect_tuple_union(Tys, [TTy | AccTy], constraints:combine(Cs, AccCs), Any, Record, TEnv);
+            expect_record_union(Tys, [TTy | AccTy], constraints:combine(Cs, AccCs), Any, Record, TEnv);
         {elem_tys, TTys, Cs} ->
-            expect_tuple_union(Tys, TTys ++ AccTy, constraints:combine(Cs, AccCs), Any, Record, TEnv)
+            expect_record_union(Tys, TTys ++ AccTy, constraints:combine(Cs, AccCs), Any, Record, TEnv)
     end;
 expect_record_union(_Record, [], _TEnv, any, AccTy, AccCs) ->
     {[ type(any) | AccTy], AccCs};
@@ -3661,9 +3666,29 @@ add_type_pat(Tuple = {tuple, P, Pats}, Ty, TEnv, VEnv) ->
         {type_error, _Type} ->
             throw({type_error, pattern, P, Tuple, Ty})
     end;
-add_type_pat(Atom = {atom, P, Val}, Ty, TEnv, VEnv) ->
-    LitTy = {atom, erl_anno:new(0), Val},
-    case subtype(LitTy, Ty, TEnv) of
+add_type_pat({record, P, Record, Fields}, Ty, TEnv, VEnv) ->
+    case expect_record_type(Ty, Record, TEnv) of
+        any ->
+            %% FIXME: If record() is used and we try to bind, every field types
+            %% - should be any(). add_any_types_pat won't work, will need a
+            %% - add_any_type_pat_fields
+            {type(none)
+                ,Ty
+                ,union_var_binds([add_any_types_pat(Field, VEnv) || Field <- Fields], TEnv)
+                ,constraints:empty()};
+        {elem_ty, Tys, Cs} ->
+            {PatTys, _UBounds, VEnv1, Cs1} = add_type_pat_fields(Fields, Record, TEnv, VEnv),
+            io:format(user, "DEBUG, add_type_pat record, PatTys = ~p~n", [PatTys]),
+            RecTy = {type, erl_anno:new(0), record, [{atom, erl_anno:new(0), Record}]},
+            {type(none)
+            ,type_record(Record)
+            ,VEnv1
+            ,constraints:combine(Cs1, Cs2)};
+        {type_error, _Type} ->
+            throw({type_error, record_pattern, P, Record, Ty})
+    end;
+add_type_pat(Atom = {atom, P, _}, Ty, TEnv, VEnv) ->
+    case subtype(Atom, Ty, TEnv) of
         {true, Cs} ->
             {LitTy, LitTy, VEnv, Cs};
         false ->
@@ -3721,7 +3746,7 @@ add_type_pat({bin, _P, BinElements} = Bin, Ty, TEnv, VEnv) ->
                     {VEnv, Cs1},
                     BinElements),
     {type(none), BinTy, NewVEnv, Cs};
-add_type_pat({record, P, Record, Fields}, Ty, TEnv, VEnv) ->
+add_type_pat({record, P, Record, Fields}, Ty, TEnv, VEnv, _) ->
     case expect_record_type(Ty, Record, TEnv) of
         any ->
             {type(none)
@@ -3822,9 +3847,11 @@ add_type_pat_fields([], _, _TEnv, VEnv) ->
     ret(VEnv);
 add_type_pat_fields([{record_field, Anno, {atom, _, _} = FieldWithAnno, Pat}|Fields],
                     Record, TEnv, VEnv) ->
+    io:format(user, "DEBUG: add_type_pat_fields, FieldWithAnno = ~p~n", [FieldWithAnno]),
     Rec = get_record_fields(Record, Anno, TEnv),
     FieldTy = get_rec_field_type(FieldWithAnno, Rec),
     {_TyPat, _UBound, VEnv2, Cs1} = add_type_pat(Pat, FieldTy, TEnv, VEnv),
+    io:format(user, "DEBUG: add_type_pat_fields, _TyPat = ~p~n", [_TyPat]),
     {VEnv3, Cs2} = add_type_pat_fields(Fields, Record, TEnv, VEnv2),
     {VEnv3, constraints:combine(Cs1, Cs2)};
 add_type_pat_fields([{record_field, _, {var, _, '_'}, _Pat}|Fields],

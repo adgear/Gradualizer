@@ -946,19 +946,14 @@ infer_literal_string(Str) ->
     end.
 
 expect_tuple_type({type, _, tuple, any}, _N) ->
-    io:format(user, "DEBUG, expect_tuple_type, any~n", []),
     any;
 expect_tuple_type({type, _, tuple, Tys}, N) when length(Tys) == N ->
-    io:format(user, "DEBUG, expect_tuple_type, same~n", []),
     {elem_ty, Tys, constraints:empty()};
 expect_tuple_type(?top() = TermTy, N) ->
-    io:format(user, "DEBUG, expect_tuple_type, top~n", []),
     {elem_ty, lists:duplicate(N, TermTy), constraints:empty()};
 expect_tuple_type({ann_type, _, [_, Ty]}, N) ->
-    io:format(user, "DEBUG, expect_tuple_type, ann~n", []),
     expect_tuple_type(Ty, N);
 expect_tuple_type(Union = {type, _, union, UnionTys}, N) ->
-    io:format(user, "DEBUG, expect_tuple_type, union~n", []),
     {Tyss, Cs} =
         expect_tuple_union(UnionTys, [], constraints:empty(), no_any, N),
     case Tyss of
@@ -970,7 +965,6 @@ expect_tuple_type(Union = {type, _, union, UnionTys}, N) ->
             {elem_tys, Tyss, Cs}
     end;
 expect_tuple_type({var, _, Var}, N) ->
-    io:format(user, "DEBUG, expect_tuple_type, var~n", []),
     TyVars = [ new_type_var() || _ <- lists:seq(1,N) ],
     {elem_ty
     ,[ {var, erl_anno:new(0), TyVar} || TyVar <- TyVars ]
@@ -1125,24 +1119,22 @@ expect_fun_type_union(Env, [Ty|Tys]) ->
 
 refine_record_type([], [], Acc) -> lists:reverse(Acc);
 refine_record_type([RecordTy|RecordTys], [RefinedTy|RefinedTys], Acc) ->
-    io:format(user, "DEBUG: refine_record_type, RecordTy = ~p~n", [RecordTy]),
     Refined =
         case RecordTy of
             {typed_record_field, Field, _} ->
                 {typed_record_field, Field, RefinedTy};
             {typed_record_field, Field, _} ->
-                {typed_record_field, Field, RefinedTy}
+                {typed_record_field, Field, RefinedTy};
+            _ -> RecordTy
         end,
     refine_record_type(RecordTys, RefinedTys, [Refined|Acc]).
 
 expect_record_type({user_type, _, record, []}, _Record, _TEnv) ->
-    io:format(user, "DEBUG, expect_record_type, any~n", []),
     any;
 expect_record_type({type, _, record, [{atom, _, Name}|Refined]}, Record, TEnv) ->
     case maps:is_key(Name, TEnv#tenv.records) of
         true when Record == Name ->
             RecTy = maps:get(Name, TEnv#tenv.records),
-            io:format(user, "DEBUG, ALMOST!!!!! RecTy = ~p~n", [RecTy]),
             case Refined of
                 [] -> {elem_ty, RecTy, constraints:empty()};
                 _ ->
@@ -1153,13 +1145,10 @@ expect_record_type({type, _, record, [{atom, _, Name}|Refined]}, Record, TEnv) -
             {type_error, Record}
     end;
 expect_record_type(?top() = TermTy, _Record, _TEnv) ->
-    io:format(user, "DEBUG, expect_record_type, top~n", []),
     {elem_ty, TermTy, constraints:empty()};
 expect_record_type({ann_type, _, [_, Ty]}, Record, TEnv) ->
-    io:format(user, "DEBUG, expect_record_type, ann~n", []),
     expect_record_type(Ty, Record, TEnv);
 expect_record_type(Union = {type, _, union, UnionTys}, Record, TEnv) ->
-    io:format(user, "DEBUG, expect_record_type, union~n", []),
     {Tyss, Cs} =
         expect_record_union(UnionTys, [], constraints:empty(), no_any, Record, TEnv),
     case Tyss of
@@ -1171,13 +1160,11 @@ expect_record_type(Union = {type, _, union, UnionTys}, Record, TEnv) ->
             {elem_tys, Tyss, Cs}
     end;
 expect_record_type({var, _, Var}, Record, _TEnv) ->
-    io:format(user, "DEBUG, expect_record_type, var~n", []),
     {elem_ty
     , {var, erl_anno:new(0), Var}
     , constraints:add_var(Var,
         constraints:upper(Var, {record, erl_anno:new(0), Record}))};
 expect_record_type(_, Ty, _) ->
-    io:format(user, "DEBUG: FUCK, in last~n", []),
     {type_error, Ty}.
 
 expect_record_union([Ty | Tys], AccTy, AccCs, Any, Record, TEnv) ->
@@ -3161,7 +3148,6 @@ check_clause(Env, ArgsTy, ResTy, C = {clause, P, Args, Guards, Block}, Caps) ->
     ?verbose(Env, "~sChecking clause :: ~s~n", [gradualizer_fmt:format_location(C, brief), typelib:pp_type(ResTy)]),
     case {length(ArgsTy), length(Args)} of
         {L, L} ->
-            io:format(user, "DEBUG: check_clause, ArgsTy = ~p~n", [[typelib:remove_pos(ArgTy) || ArgTy <- ArgsTy]]),
             {PatTys, _UBounds, VEnv2, Cs1} =
                 add_types_pats(Args, ArgsTy, Env#env.tenv, Env#env.venv, Caps),
             EnvNew      = Env#env{ venv =  VEnv2 },
@@ -3190,7 +3176,6 @@ refine_clause_arg_tys(Tys, MatchedTys, [], TEnv) ->
     MatchedTy = type(tuple, MatchedTys),
     case type_diff(Ty, MatchedTy, TEnv) of
         ?type(tuple, RefTys) ->
-            io:format(user, "DEBUG: refine_clause_arg_tys, in tuple~n", []),
             RefTys;
         ?type(none) ->
             lists:duplicate(length(Tys), type(none));
@@ -3252,10 +3237,8 @@ refine(OrigTy, Ty, TEnv) ->
     NormTy = normalize(OrigTy, TEnv),
     case refine_ty(NormTy, normalize(Ty, TEnv), TEnv) of
         NormTy ->
-            io:format(user, "DEBUG: refine, NormTy so using OrigTy = ~p~n", [OrigTy]),
             OrigTy;
         RefTy  ->
-            io:format(user, "DEBUG: refine, RefTy = ~p~n", [RefTy]),
             RefTy
     end.
 
@@ -3272,7 +3255,6 @@ refine_record_fields([{typed_record_field, {record_field, _, Name, _}, Ty}|Recor
 refine_record(Name, Anno, Fields, TEnv) ->
     RecordFields = get_record_fields(Name, Anno, TEnv),
     Final = type(record, [{atom, erl_anno:new(0), Name}|refine_record_fields(RecordFields, Fields, [], TEnv)]),
-    io:format(user, "DEBUG: refine_record, Final = ~p~n", [Final]),
     Final.
 
 %% May throw no_refinement.
@@ -3283,37 +3265,25 @@ refine_ty(_Ty, ?type(none), _TEnv) ->
 refine_ty(?type(T, A), ?type(T, A), _) ->
     type(none);
 refine_ty(?type(record, [{atom, _, Name}]), ?type(record, [{atom, _, Name}]), _) ->
-    io:format(user, "DEBUG: refine_ty, record with only name, same~n", []),
     type(none);
 refine_ty(?type(record, [{atom, Anno, Name}]), Refined = ?type(record, [{atom, _, Name} | Fields]), TEnv) ->
-    io:format(user, "DEBUG: refine_ty, record with only name, rhs has refinement = ~p~n", [Refined]),
     refine_record(Name, Anno, Fields, TEnv);
 refine_ty(Refined = ?type(record, [{atom, _, Name} | Fields]), ?type(record, [{atom, Anno, Name}]), TEnv) ->
-    io:format(user, "DEBUG: refine_ty, record with only name, lhs has refinement = ~p~n", [Refined]),
     refine_record(Name, Anno, Fields, TEnv);
 refine_ty(?type(record, [Name|Tys1]), ?type(record, [Name|Tys2]), TEnv)
   when length(Tys1) > 0, length(Tys1) == length(Tys2) ->
     % Record without just the name
     RefTys = [refine(Ty1, Ty2, TEnv) || {Ty1, Ty2} <- lists:zip(Tys1, Tys2)],
-    io:format(user, "DEBUG: refine_ty, record, Tys1 = ~p~n", [Tys1]),
-    io:format(user, "DEBUG: refine_ty, record, Tys2 = ~p~n", [Tys2]),
-    io:format(user, "DEBUG: refine_ty, record, RefTys = ~p~n", [RefTys]),
     RecordsElems = pick_one_refinement_each(Tys1, RefTys),
-    io:format(user, "DEBUG: refine_ty, record, RecordsElems = ~p~n", [RecordsElems]),
     Records = [type(record, [Name|RecordElems]) || RecordElems <- RecordsElems],
-    io:format(user, "DEBUG: refine_ty, record, Records = ~p~n", [Records]),
     normalize(type(union, Records), TEnv);
 refine_ty(?type(union, UnionTys), Ty, TEnv) ->
     RefTys = lists:foldr(fun (UnionTy, Acc) ->
                              try refine(UnionTy, Ty, TEnv) of
                                  RefTy ->
-                                     io:format(user, "DEBUG: refine_ty for union, not disjoin, UnionTy = ~p~n", [UnionTy]),
-                                     io:format(user, "DEBUG: refine_ty for union, not disjoin, Ty = ~p~n", [Ty]),
-                                     io:format(user, "DEBUG: refine_ty for union, not disjoin, RefTy = ~p~n", [RefTy]),
                                      [RefTy|Acc]
                              catch
                                  disjoint ->
-                                     io:format(user, "DEBUG: refine_ty for union, disjoin, UnionTy = ~p~n", [UnionTy]),
                                      [UnionTy|Acc]
                              end
                           end,
@@ -3342,13 +3312,8 @@ refine_ty(?type(tuple, Tys1), ?type(tuple, Tys2), TEnv)
     %% Non-empty tuple
     RefTys = [refine(Ty1, Ty2, TEnv) || {Ty1, Ty2} <- lists:zip(Tys1, Tys2)],
     %% {a|b, a|b} \ {a,a} => {b, a|b}, {a|b, b}
-    io:format(user, "DEBUG: refine_ty, tuple, Tys1 = ~p~n", [Tys1]),
-    io:format(user, "DEBUG: refine_ty, tuple, Tys2 = ~p~n", [Tys2]),
-    io:format(user, "DEBUG: refine_ty, tuple, RefTys = ~p~n", [RefTys]),
     TuplesElems = pick_one_refinement_each(Tys1, RefTys),
-    io:format(user, "DEBUG: refine_ty, tuple, TuplesElems = ~p~n", [TuplesElems]),
     Tuples = [type(tuple, TupleElems) || TupleElems <- TuplesElems],
-    io:format(user, "DEBUG: refine_ty, tuple, Tuples = ~p~n", [Tuples]),
     normalize(type(union, Tuples), TEnv);
 refine_ty({atom, _, A}, {atom, _, A}, _) ->
     type(none);
@@ -3380,9 +3345,6 @@ refine_ty({user_type, Anno, Name, Args}, {user_type, Anno, Name, Args}, _TEnv) -
     % If it has the same annotation, name and args, it's the same.
     type(none);
 refine_ty(Ty1, Ty2, TEnv) ->
-    io:format(user, "DEBUG: refine_ty, last~n", []),
-    io:format(user, "DEBUG: refine_ty, Ty1 = ~p~n", [Ty1]),
-    io:format(user, "DEBUG: refine_ty, Ty2 = ~p~n", [Ty2]),
     case glb(Ty1, Ty2, TEnv) of
         {?type(none), _}  -> throw(disjoint);     %% disjoint
         _NotDisjoint -> throw(no_refinement) %% imprecision
@@ -3723,7 +3685,6 @@ add_type_pat(Lit = {float, P, _}, Ty, TEnv, VEnv) ->
             throw({type_error, pattern, P, Lit, Ty})
     end;
 add_type_pat(Tuple = {tuple, P, Pats}, Ty, TEnv, VEnv) ->
-    io:format(user, "DEBUG: add_type_pat tuple in~n", []),
     case expect_tuple_type(Ty, length(Pats)) of
         any ->
             {type(none)
@@ -3751,7 +3712,6 @@ add_type_pat({record, P, Record, Fields}, Ty, TEnv, VEnv) ->
             ,constraints:empty()};
         {elem_ty, Tys, Cs} ->
             {PatTys, UBounds, VEnv1, Cs1} = add_type_pat_fields(Fields, Tys, TEnv, VEnv),
-            io:format(user, "DEBUG, add_type_pat record, PatTys = ~p~n", [PatTys]),
             {type_record(Record, PatTys)
             ,type_record(Record, UBounds)
             ,VEnv1
@@ -3940,7 +3900,6 @@ add_type_pat_fields([{record_field, Anno, {atom, _, _} = FieldWithAnno, Pat}|Fie
 add_type_pat_fields([{record_field, _, {var, _, '_'}, _Pat}|Fields],
                     Record, TEnv, VEnv, PatTysAcc, UBoundsAcc, CsAcc) ->
     %% TODO check Pat against type of unassigned fields
-    io:format(user, "DEBUG: WTF TO DO HERE???~n", []),
     {VEnv2, Cs1} = {VEnv, constraints:empty()},
 
     {VEnv3, Cs2} = add_type_pat_fields(Fields, Record, TEnv, VEnv2),
@@ -4316,7 +4275,6 @@ type_check_forms(Forms, Opts) ->
         lists:foldr(
           fun (Function, Errors) when Errors =:= [];
                                       not StopOnFirstError ->
-                        io:format(user, "DEBUG: BEGIN----------------------------------------------~n", []),
                         try type_check_function(Env, Function) of
                             {_VarBinds, _Cs} ->
                                 Errors

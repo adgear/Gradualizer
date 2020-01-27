@@ -48,6 +48,9 @@ pp_type(Type = {type, _, bounded_fun, _}) ->
 pp_type({var, _, TyVar}) ->
     %% TODO: In type(), TyVar should be an atom but we use a string.
     TyVar;
+pp_type({type, TypeAnno, record, [{atom, AtomAnno, Name}|Fields]})
+  when length(Fields) /= 0 ->
+    pp_type({type, TypeAnno, record, [{atom, AtomAnno, Name}]});
 pp_type(Type) ->
     %% erl_pp can handle type definitions, so wrap Type in a type definition
     %% and then take the type from that.
@@ -92,7 +95,8 @@ remove_pos({Type, _, Value})
 remove_pos({user_type, Anno, Name, Params}) when is_list(Params) ->
     {user_type, anno_keep_only_filename(Anno), Name,
      lists:map(fun remove_pos/1, Params)};
-remove_pos({type, Anno, record, Params = [{atom, AtomAnno, Name}]}) ->
+remove_pos({type, Anno, record, Params = [{atom, AtomAnno, Name}|Fields0]}) ->
+
     {type, anno_keep_only_filename(Anno), record, [{atom, anno_keep_only_filename(AtomAnno), Name}]};
 remove_pos({type, _, bounded_fun, [FT, Cs]}) ->
     {type, erl_anno:new(0), bounded_fun, [remove_pos(FT)

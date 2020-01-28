@@ -51,6 +51,8 @@
 -define(type(T, A), {type, _, T, A}).
 -define(top(), {remote_type, _, [{atom,_,gradualizer}
 				,{atom,_,top},[]]}).
+-define(record_field(Name), {record_field, _, {atom, _, Name}, _}).
+-define(typed_record_field(Name), {typed_record_field, ?record_field(Name), _}).
 
 %% Data collected from epp parse tree
 -record(parsedata, {
@@ -3886,10 +3888,15 @@ add_type_pat_literal(Pat, Ty, TEnv, VEnv) ->
             end
     end.
 
-add_type_pat_fields([], _, _TEnv, VEnv) ->
+find_field_or_create([], Name) -> {record_field, erl_anno:new(0), {atom, erl_anno:new(0), Name}, {var, erl_anno:new(0), '_'}};
+find_field_or_create([Field = ?record_field(Name)|Fields], Name) -> Field;
+find_field_or_create([_|Fields], Name) -> find_field_or_create(Fields, Name).
+
+add_type_pat_fields([], _, _TEnv, VEnv, _) ->
     ret(VEnv);
 add_type_pat_fields(Fields, Tys, TEnv, VEnv) ->
-    add_type_pat_fields(Fields, Tys, TEnv, VEnv, [], [], []).
+    AllFields = [ find_field_or_create(Fields, Name) || ?typed_record_field(Name) <- Tys],
+    add_type_pat_fields(AllFields, Tys, TEnv, VEnv, [], [], []).
 
 add_type_pat_fields([], _, _TEnv, VEnv, PatTysAcc, UBoundsAcc, CsAcc) ->
     {lists:reverse(PatTysAcc), lists:reverse(UBoundsAcc),

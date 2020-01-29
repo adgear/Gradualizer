@@ -2161,15 +2161,32 @@ do_type_check_expr_in(Env, ResTy, {record, Anno, Exp, Name, Fields} = Record) ->
                    ResTy})
     end;
 do_type_check_expr_in(Env, ResTy, {record_field, Anno, Expr, Name, FieldWithAnno} = RecordField) ->
-    Rec = get_record_fields(Name, Anno, Env#env.tenv),
-    FieldTy = get_rec_field_type(FieldWithAnno, Rec),
-    case subtype(FieldTy, ResTy, Env#env.tenv) of
+    RecFields = get_record_fields(Name, Anno, Env#env.tenv),
+    {FieldIndex, FieldTy} = get_rec_field_index_and_type(FieldWithAnno, RecFields, 2),
+    {RecTy, RefinedFieldTy} =
+        case Expr of
+            {var, P, Var} ->
+                case Env#env.venv of
+                    #{Var := VarType} ->
+                        case VarType of
+                            {type, _, record, [{atom, _, Name}]} ->
+                                {VarType, FieldTy};
+                            {type, _, record, [{atom, _, Name}|RefinedFields]} ->
+                                {VarType, lists:nth(FieldIndex-1, RefinedFields)};
+                            _ ->
+                                throw({type_error, mismatch, type_record(Name), Expr})
+                        end;
+                    _ ->
+                        throw({unknown_variable, P, Var})
+                end;
+            _ -> {type_record(Name), FieldTy}
+        end,
+    case subtype(RefinedFieldTy, ResTy, Env#env.tenv) of
         {true, Cs1} ->
-            RecTy = {type, erl_anno:new(0), record, [{atom, erl_anno:new(0), Name}]},
             {VarBinds, Cs2} = type_check_expr_in(Env, RecTy, Expr),
             {VarBinds, constraints:combine([Cs1,Cs2])};
         false ->
-            throw({type_error, RecordField, FieldTy, ResTy})
+            throw({type_error, RecordField, RefinedFieldTy, ResTy})
     end;
 do_type_check_expr_in(Env, ResTy, {record_index, Anno, Name, FieldWithAnno} = RecIndex) ->
     RecFields = get_record_fields(Name, Anno, Env#env.tenv),

@@ -96,8 +96,8 @@ remove_pos({user_type, Anno, Name, Params}) when is_list(Params) ->
     {user_type, anno_keep_only_filename(Anno), Name,
      lists:map(fun remove_pos/1, Params)};
 remove_pos({type, Anno, record, Params = [{atom, AtomAnno, Name}|Fields0]}) ->
-
-    {type, anno_keep_only_filename(Anno), record, [{atom, anno_keep_only_filename(AtomAnno), Name}]};
+    Fields = [remove_pos(Field) || Field <- Fields0],
+    {type, anno_keep_only_filename(Anno), record, [{atom, anno_keep_only_filename(AtomAnno), Name}|Fields]};
 remove_pos({type, _, bounded_fun, [FT, Cs]}) ->
     {type, erl_anno:new(0), bounded_fun, [remove_pos(FT)
                                          ,lists:map(fun remove_pos/1, Cs)]};

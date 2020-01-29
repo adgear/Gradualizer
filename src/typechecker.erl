@@ -53,6 +53,7 @@
 				,{atom,_,top},[]]}).
 -define(record_field(Name), {record_field, _, {atom, _, Name}, _}).
 -define(typed_record_field(Name), {typed_record_field, ?record_field(Name), _}).
+-define(typed_record_field(Name, Type), {typed_record_field, ?record_field(Name), Type}).
 
 %% Data collected from epp parse tree
 -record(parsedata, {
@@ -392,7 +393,7 @@ glb(T1, T2, TEnv) ->
 glb(Ts, TEnv) ->
     lists:foldl(fun (T, {TyAcc, Cs1}) ->
 			{Ty, Cs2} = glb(T, TyAcc, TEnv),
-			{Ty, constraints:combine(Cs1, Cs2)}
+        {Ty, constraints:combine(Cs1, Cs2)}
 		end,
                 {top(), constraints:empty()},
                 Ts).
@@ -3259,16 +3260,10 @@ refine(OrigTy, Ty, TEnv) ->
             RefTy
     end.
 
-refine_record_fields([], [], Acc, _TEnv) -> lists:reverse(Acc);
-refine_record_fields([{typed_record_field, {record_field, _, Name}, Ty}|RecordFields], [Field|Fields], Acc, TEnv) ->
-    refine_record_fields(RecordFields, Fields, [refine(Ty, Field, TEnv)|Acc], TEnv);
-refine_record_fields([{typed_record_field, {record_field, _, Name, _}, Ty}|RecordFields], [Field|Fields], Acc, TEnv) ->
-    refine_record_fields(RecordFields, Fields, [refine(Ty, Field, TEnv)|Acc], TEnv).
-
-refine_record(Name, Anno, Fields, TEnv) ->
+expand_record(Name, Anno, TEnv) ->
     RecordFields = get_record_fields(Name, Anno, TEnv),
-    Final = type(record, [{atom, erl_anno:new(0), Name}|refine_record_fields(RecordFields, Fields, [], TEnv)]),
-    Final.
+    Fields = [Type || ?typed_record_field(_, Type) <- RecordFields],
+    type_record(Name, Fields).
 
 %% May throw no_refinement.
 refine_ty(_Ty, ?type(none), _TEnv) ->
@@ -3280,9 +3275,9 @@ refine_ty(?type(T, A), ?type(T, A), _) ->
 refine_ty(?type(record, [{atom, _, Name}]), ?type(record, [{atom, _, Name}]), _) ->
     type(none);
 refine_ty(?type(record, [{atom, Anno, Name}]), Refined = ?type(record, [{atom, _, Name} | Fields]), TEnv) ->
-    refine_record(Name, Anno, Fields, TEnv);
+    refine_ty(expand_record(Name, Anno, TEnv), Refined, TEnv);
 refine_ty(Refined = ?type(record, [{atom, _, Name} | Fields]), ?type(record, [{atom, Anno, Name}]), TEnv) ->
-    refine_record(Name, Anno, Fields, TEnv);
+    refine_ty(Refined, expand_record(Name, Anno, TEnv), TEnv);
 refine_ty(?type(record, [Name|Tys1]), ?type(record, [Name|Tys2]), TEnv)
   when length(Tys1) > 0, length(Tys1) == length(Tys2) ->
     % Record without just the name
@@ -3888,14 +3883,22 @@ add_type_pat_literal(Pat, Ty, TEnv, VEnv) ->
             end
     end.
 
-find_field_or_create([], Name) -> {record_field, erl_anno:new(0), {atom, erl_anno:new(0), Name}, {var, erl_anno:new(0), '_'}};
-find_field_or_create([Field = ?record_field(Name)|Fields], Name) -> Field;
-find_field_or_create([_|Fields], Name) -> find_field_or_create(Fields, Name).
+find_field_or_create([], Name, Default) -> {record_field, erl_anno:new(0), {atom, erl_anno:new(0), Name}, Default};
+find_field_or_create([Field = ?record_field(Name)|Fields], Name, _Default) -> Field;
+find_field_or_create([_|Fields], Name, Default) -> find_field_or_create(Fields, Name, Default).
+
+find_field_default([]) -> {var, erl_anno:new(0), '_'};
+find_field_default([{record_field, _, {var, _, '_'}, Exp}|Fields]) -> Exp;
+find_field_default([_|Fields]) -> find_field_default(Fields).
 
 add_type_pat_fields([], _, _TEnv, VEnv, _) ->
     ret(VEnv);
 add_type_pat_fields(Fields, Tys, TEnv, VEnv) ->
-    AllFields = [ find_field_or_create(Fields, Name) || ?typed_record_field(Name) <- Tys],
+    %% Add every missing fields
+    %% If an underscore field is present: use that expression as the default expression
+    %% Otherwise, give an empty assignment of the field to underscore
+    Default = find_field_default(Fields),
+    AllFields = [ find_field_or_create(Fields, Name, Default) || ?typed_record_field(Name) <- Tys],
     add_type_pat_fields(AllFields, Tys, TEnv, VEnv, [], [], []).
 
 add_type_pat_fields([], _, _TEnv, VEnv, PatTysAcc, UBoundsAcc, CsAcc) ->
@@ -3914,16 +3917,7 @@ add_type_pat_fields([{record_field, Anno, {atom, _, _} = FieldWithAnno, Pat}|Fie
     UBound = case UBoundNorm of NormTy -> Ty;
                  _      -> UBoundNorm end,
     add_type_pat_fields(Fields, Record, TEnv, VEnv2,
-                        [PatTy|PatTysAcc], [UBound|UBoundsAcc], [Cs1|CsAcc]);
-add_type_pat_fields([{record_field, _, {var, _, '_'}, _Pat}|Fields],
-                    Record, TEnv, VEnv, PatTysAcc, UBoundsAcc, CsAcc) ->
-    %% TODO check Pat against type of unassigned fields
-    {VEnv2, Cs1} = {VEnv, constraints:empty()},
-
-    {PatTyNorm, UBoundNorm, VEnv3, Cs2} = add_type_pat_fields(Fields, Record, TEnv, VEnv2),
-    Cs = constraints:combine(Cs1, Cs2),
-    add_type_pat_fields([], [], TEnv, VEnv3, lists:append(PatTyNorm, PatTysAcc),
-        lists:append(UBoundNorm, UBoundsAcc), [Cs|CsAcc]).
+                        [PatTy|PatTysAcc], [UBound|UBoundsAcc], [Cs1|CsAcc]).
 
 %% Given a pattern for a key, finds the matching association in the map type and
 %% returns the value type. Returns 'error' if the key is not valid in the map.

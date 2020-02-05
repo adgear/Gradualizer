@@ -36,11 +36,3 @@ underscore(#underscore{a = A, c = C, _ = undefined}) -> A + C;
 underscore(#underscore{b = B, c = C, _ = undefined}) -> B + C;
 underscore(#underscore{a = A, b = B, c = C}) -> A + B + C.
 
-%%-record(refine, { a :: integer() | undefined}).
-%%-spec refine(#refine{}) -> #refine{a :: integer()} | undefined.
-%%refine(#refine{a = undefined}) -> undefined;
-%%refine(R) -> R.
-%%
-%%-spec refine2(#refine{}) -> #refine{a :: integer()}.
-%%refine2(#refine{a = undefined}) -> #refine{a = 0};
-%%refine2(R) -> R.

@@ -241,6 +241,12 @@ compat_ty({type, P1, record, [{atom, _, Name}]},
     Fields2 = get_maybe_remote_record_fields(Name, P2, TEnv),
     compat_record_fields(Fields1, Fields2, A, TEnv);
 
+%% Records that have been refined on one side or the other
+compat_ty({type, Anno1, record, [{atom, _, Name}|Fields1]},
+          {type, Anno2, record, [{atom, _, Name}|Fields2]}, A, TEnv) ->
+    AllFields1 = case Fields1 of [] -> get_record_fields_types(Name, Anno1, TEnv); _ -> Fields1 end,
+    AllFields2 = case Fields2 of [] -> get_record_fields_types(Name, Anno2, TEnv); _ -> Fields2 end,
+    compat_record_tys(AllFields1, AllFields2, A, TEnv);
 compat_ty({type, _, record, _}, {type, _, tuple, any}, A, _TEnv) ->
     ret(A);
 
@@ -299,6 +305,17 @@ compat_tys([Ty1|Tys1], [Ty2|Tys2], A, TEnv) ->
     {Aps, Css} = compat_tys(Tys1, Tys2, Ap, TEnv),
     {Aps, constraints:combine(Cs, Css)};
 compat_tys(_Tys1, _Tys2, _, _) ->
+    throw(nomatch).
+
+
+compat_record_tys([], [], A, _TEnv) ->
+    ret(A);
+compat_record_tys([Field1|Fields1], [Field2|Fields2], A, TEnv) ->
+    {A1, Cs1} = compat(Field1, Field2, A, TEnv),
+    {A2, Cs2} = compat_record_tys(Fields1, Fields2, A1, TEnv),
+    {A2, constraints:combine(Cs1, Cs2)};
+compat_record_tys(_, _, _, _) ->
+    %% Mismatching number of fields
     throw(nomatch).
 
 %% Two records are compatible if they have the same name (defined in different
@@ -3277,10 +3294,12 @@ refine(OrigTy, Ty, TEnv) ->
             RefTy
     end.
 
-expand_record(Name, Anno, TEnv) ->
+get_record_fields_types(Name, Anno, TEnv) ->
     RecordFields = get_record_fields(Name, Anno, TEnv),
-    Fields = [Type || ?typed_record_field(_, Type) <- RecordFields],
-    type_record(Name, Fields).
+    [Type || ?typed_record_field(_, Type) <- RecordFields].
+
+expand_record(Name, Anno, TEnv) ->
+    type_record(Name, get_record_fields_types(Name, Anno, TEnv)).
 
 %% May throw no_refinement.
 refine_ty(_Ty, ?type(none), _TEnv) ->

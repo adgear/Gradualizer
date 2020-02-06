@@ -3288,10 +3288,8 @@ type_diff(Ty1, Ty2, TEnv) ->
 refine(OrigTy, Ty, TEnv) ->
     NormTy = normalize(OrigTy, TEnv),
     case refine_ty(NormTy, normalize(Ty, TEnv), TEnv) of
-        NormTy ->
-            OrigTy;
-        RefTy  ->
-            RefTy
+        NormTy -> OrigTy;
+        RefTy  -> RefTy
     end.
 
 get_record_fields_types(Name, Anno, TEnv) ->

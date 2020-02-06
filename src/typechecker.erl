@@ -1152,8 +1152,7 @@ expect_record_type({type, _, record, [{atom, _, Name}|RefinedTypes]}, Record, #t
             {type_error, Record}
     end;
 expect_record_type(?top() = TermTy, _Record, _TEnv) ->
-    %% Not much we can do here
-    any;
+    TermTy;
 expect_record_type({ann_type, _, [_, Ty]}, Record, TEnv) ->
     expect_record_type(Ty, Record, TEnv);
 expect_record_type(Union = {type, _, union, UnionTys}, Record, TEnv) ->
@@ -2145,7 +2144,7 @@ do_type_check_expr_in(Env, ResTy, {record, Anno, Name, Fields} = Record) ->
                    type(record, [{atom, erl_anno:new(0), Name}]),
                    ResTy})
     end;
-do_type_check_expr_in(Env, ResTy, {record, Anno, Exp, Name, Fields} = Record) ->
+do_type_check_expr_in(Env, ResTy, {record, _, Exp, Name, Fields} = Record) ->
     case expect_record_type(ResTy, Name, Env#env.tenv) of
         {elem_ty, Rec, Cs1} ->
             {VarBindsList, Css}
@@ -3306,9 +3305,9 @@ refine_ty(?type(T, A), ?type(T, A), _) ->
     type(none);
 refine_ty(?type(record, [{atom, _, Name}]), ?type(record, [{atom, _, Name}]), _) ->
     type(none);
-refine_ty(?type(record, [{atom, Anno, Name}]), Refined = ?type(record, [{atom, _, Name} | Fields]), TEnv) ->
+refine_ty(?type(record, [{atom, Anno, Name}]), Refined = ?type(record, [{atom, _, Name} | _]), TEnv) ->
     refine_ty(expand_record(Name, Anno, TEnv), Refined, TEnv);
-refine_ty(Refined = ?type(record, [{atom, _, Name} | Fields]), ?type(record, [{atom, Anno, Name}]), TEnv) ->
+refine_ty(Refined = ?type(record, [{atom, _, Name} | _]), ?type(record, [{atom, Anno, Name}]), TEnv) ->
     refine_ty(Refined, expand_record(Name, Anno, TEnv), TEnv);
 refine_ty(?type(record, [Name|Tys1]), ?type(record, [Name|Tys2]), TEnv)
   when length(Tys1) > 0, length(Tys1) == length(Tys2) ->

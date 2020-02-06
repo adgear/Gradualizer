@@ -3761,7 +3761,7 @@ add_type_pat({record, P, Record, Fields}, Ty, TEnv, VEnv, Caps) ->
     end;
 add_type_pat(Atom = {atom, P, Val}, Ty, TEnv, VEnv, _) ->
     LitTy = {atom, erl_anno:new(0), Val},
-    case subtype(Atom, Ty, TEnv) of
+    case subtype(LitTy, Ty, TEnv) of
         {true, Cs} ->
             {LitTy, LitTy, VEnv, Cs};
         false ->

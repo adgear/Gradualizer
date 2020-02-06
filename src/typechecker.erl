@@ -1174,7 +1174,7 @@ expect_record_type({var, _, Var}, Record, _TEnv) ->
     {elem_ty
     , {var, erl_anno:new(0), Var}
     , constraints:add_var(Var,
-        constraints:upper(Var, {record, erl_anno:new(0), Record}))};
+        constraints:upper(Var, type_record(Record)))};
 expect_record_type(_, Ty, _) ->
     {type_error, Ty}.
 
@@ -1183,15 +1183,15 @@ expect_record_union([Ty | Tys], AccTy, AccCs, Any, Record, TEnv) ->
         {type_error, _} ->
             expect_record_union(Tys, AccTy, AccCs, Any, Record, TEnv);
         any ->
-            expect_record_union(Tys, any, AccTy, AccCs, Record, TEnv);
+            expect_record_union(Tys, AccTy, AccCs, any, Record, TEnv);
         {elem_ty, TTy, Cs} ->
             expect_record_union(Tys, [TTy | AccTy], constraints:combine(Cs, AccCs), Any, Record, TEnv);
         {elem_tys, TTys, Cs} ->
             expect_record_union(Tys, TTys ++ AccTy, constraints:combine(Cs, AccCs), Any, Record, TEnv)
     end;
-expect_record_union(_Record, [], _TEnv, any, AccTy, AccCs) ->
+expect_record_union([], AccTy, AccCs, any, _Record, _TEnv) ->
     {[ type(any) | AccTy], AccCs};
-expect_record_union(_Record, [], _TEnv, _NoAny, AccTy, AccCs) ->
+expect_record_union([], AccTy, AccCs, _NoAny, _Record, _TEnv) ->
     {AccTy, AccCs}.
 
 -spec new_type_var() -> constraints:var().

@@ -3322,11 +3322,9 @@ refine_ty(?type(record, [Name|Tys1]), ?type(record, [Name|Tys2]), TEnv)
 refine_ty(?type(union, UnionTys), Ty, TEnv) ->
     RefTys = lists:foldr(fun (UnionTy, Acc) ->
                              try refine(UnionTy, Ty, TEnv) of
-                                 RefTy ->
-                                     [RefTy|Acc]
+                                 RefTy -> [RefTy|Acc]
                              catch
-                                 disjoint ->
-                                     [UnionTy|Acc]
+                                 disjoint -> [UnionTy|Acc]
                              end
                           end,
                           [], UnionTys),

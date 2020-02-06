@@ -410,7 +410,7 @@ glb(T1, T2, TEnv) ->
 glb(Ts, TEnv) ->
     lists:foldl(fun (T, {TyAcc, Cs1}) ->
 			{Ty, Cs2} = glb(T, TyAcc, TEnv),
-        {Ty, constraints:combine(Cs1, Cs2)}
+            {Ty, constraints:combine(Cs1, Cs2)}
 		end,
                 {top(), constraints:empty()},
                 Ts).

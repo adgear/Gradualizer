@@ -3826,7 +3826,6 @@ add_type_pat({record, P, Record, Fields}, Ty, TEnv, VEnv, Caps) ->
             ,constraints:empty()};
         {elem_ty, Tys, Cs1} ->
             {VEnv2, Cs2} = add_type_pat_fields(Fields, Record, TEnv, VEnv, Caps),
-            io:format(user, "DEBUG, add_type_pat record, VEnv2 = ~p~n", [VEnv2]),
             RecTy = {type, erl_anno:new(0), record, [{atom, erl_anno:new(0), Record}]},
             {type(none), RecTy, VEnv2, constraints:combine(Cs1, Cs2)};
         {type_error, _Type} ->

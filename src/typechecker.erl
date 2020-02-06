@@ -3925,7 +3925,7 @@ find_field_default([{record_field, _, {var, _, '_'}, Exp}|Fields]) -> Exp;
 find_field_default([_|Fields]) -> find_field_default(Fields).
 
 add_type_pat_fields([], _, _TEnv, VEnv, _) ->
-    ret(VEnv);
+    {[], [], VEnv, constraints:empty()};
 add_type_pat_fields(Fields, Tys, TEnv, VEnv, Caps) ->
     %% Add every missing fields
     %% If an underscore field is present: use that expression as the default expression

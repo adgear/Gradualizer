@@ -1135,6 +1135,11 @@ expect_fun_type_union(Env, [Ty|Tys]) ->
             [TyOut | expect_fun_type_union(Env, Tys)]
     end.
 
+-spec expect_record_type(type(), atom(), #tenv{}) -> Any | ElemTy | ElemTys | TypeError when
+    Any :: any,
+    ElemTy :: {elem_ty, [typed_record_field()], constraints:constraints()},
+    ElemTys :: {elem_tys, [[typed_record_field()]], constraints:constraints()},
+    TypeError :: {type_error, type()}.
 expect_record_type({user_type, _, record, []}, _Record, _TEnv) ->
     any;
 expect_record_type({type, _, record, [{atom, _, Name}|RefinedTypes]}, Record, #tenv{records = REnv}) when Name =:= Record ->
@@ -1151,8 +1156,8 @@ expect_record_type({type, _, record, [{atom, _, Name}|RefinedTypes]}, Record, #t
         _NotFound ->
             {type_error, Record}
     end;
-expect_record_type(?top() = TermTy, _Record, _TEnv) ->
-    TermTy;
+expect_record_type(?top() = _TermTy, _Record, _TEnv) ->
+    any;
 expect_record_type({ann_type, _, [_, Ty]}, Record, TEnv) ->
     expect_record_type(Ty, Record, TEnv);
 expect_record_type(Union = {type, _, union, UnionTys}, Record, TEnv) ->
@@ -2159,13 +2164,13 @@ do_type_check_expr_in(Env, ResTy, {record, _, Exp, Name, Fields} = Record) ->
             {VarBinds, Cs2} = type_check_expr_in(Env, RecordTy, Exp),
             {union_var_binds([VarBinds|VarBindsList], Env#env.tenv)
                 ,constraints:combine([Cs1, Cs2|Css])};
-        {elem_tys, Tyss, Cs} ->
+        {elem_tys, Tyss, Cs1} ->
             case type_check_record_union_in(Env, Tyss, Fields) of
                 none ->
                     {Ty, _VB, _Cs} = type_check_expr(Env#env{infer = true}, Record),
                     throw({type_error, Record, Ty, ResTy});
-                {VBs, Css} ->
-                    {union_var_binds(VBs, Env#env.tenv), constraints:combine([Cs|Css])}
+                {VBs, Cs2} ->
+                    {union_var_binds(VBs, Env#env.tenv), constraints:combine(Cs1, Cs2)}
             end;
         any -> fuck;
         {type_error, _} ->

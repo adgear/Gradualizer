@@ -2172,7 +2172,7 @@ do_type_check_expr_in(Env, ResTy, {record, _, Exp, Name, Fields} = Record) ->
                 {VBs, Cs2} ->
                     {union_var_binds(VBs, Env#env.tenv), constraints:combine(Cs1, Cs2)}
             end;
-        any -> fuck;
+        any -> todo;
         {type_error, _} ->
             throw({type_error,
                    Record,

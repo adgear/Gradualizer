@@ -48,9 +48,6 @@ pp_type(Type = {type, _, bounded_fun, _}) ->
 pp_type({var, _, TyVar}) ->
     %% TODO: In type(), TyVar should be an atom but we use a string.
     TyVar;
-pp_type({type, TypeAnno, record, [{atom, AtomAnno, Name}|Fields]})
-  when length(Fields) /= 0 ->
-    pp_type({type, TypeAnno, record, [{atom, AtomAnno, Name}]});
 pp_type(Type) ->
     %% erl_pp can handle type definitions, so wrap Type in a type definition
     %% and then take the type from that.

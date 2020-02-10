@@ -3304,7 +3304,7 @@ refine(OrigTy, Ty, TEnv) ->
     end.
 
 get_record_fields_types(Name, Anno, TEnv) ->
-    RecordFields = get_record_fields(Name, Anno, TEnv),
+    RecordFields = get_maybe_remote_record_fields(Name, Anno, TEnv),
     [Type || ?typed_record_field(_, Type) <- RecordFields].
 
 expand_record(Name, Anno, TEnv) ->

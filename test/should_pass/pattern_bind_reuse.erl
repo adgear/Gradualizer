@@ -27,3 +27,11 @@ is_same(N, N) ->
 is_same(_, _) ->
     %% False error: This clause can't be reached
     false.
+
+-record(r, { f :: integer() | undefined }).
+
+-spec record(#r{}, integer()) -> integer().
+record(#r{f = I}, I) -> I;
+record(#r{f = undefined}, I) -> I;
+record(#r{f = I}, _) -> I.
+

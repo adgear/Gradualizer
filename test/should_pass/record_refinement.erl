@@ -36,3 +36,6 @@ underscore(#underscore{a = A, c = C, _ = undefined}) -> A + C;
 underscore(#underscore{b = B, c = C, _ = undefined}) -> B + C;
 underscore(#underscore{a = A, b = B, c = C}) -> A + B + C.
 
+-record(type_var, {f :: integer()}).
+-spec type_var([#type_var{}]) -> [integer()].
+type_var(Rs) -> lists:map(fun (R) -> R#type_var.f end, Rs).

@@ -37,6 +37,8 @@ pp_type({type, _, bounded_fun, [FunType, []]}) ->
     %% Bounded fun with empty constraints gets printed with a trailing "when"
     %% when pretty-printed as a spec (next clause)
     pp_type(?assert_type(FunType, function_type()));
+pp_type({type, Anno, record, [Name|Fields]}) when length(Fields) > 0 ->
+    pp_type({type, Anno, record, [Name]});
 pp_type(Type = {type, _, bounded_fun, _}) ->
     %% erl_pp can't handle bounded_fun in type definitions
     %% We invent our own syntax here, e.g. "fun((A) -> ok when A :: atom())"

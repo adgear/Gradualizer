@@ -3740,7 +3740,7 @@ add_type_pat(Lit = {float, P, _}, Ty, TEnv, VEnv) ->
         false ->
             throw({type_error, pattern, P, Lit, Ty})
     end;
-add_type_pat(Tuple = {tuple, P, Pats}, Ty, TEnv, VEnv, Caps) ->
+add_type_pat(Tuple = {tuple, P, Pats}, Ty, TEnv, VEnv) ->
     case expect_tuple_type(Ty, length(Pats)) of
         any ->
             {type(none)
@@ -3756,7 +3756,7 @@ add_type_pat(Tuple = {tuple, P, Pats}, Ty, TEnv, VEnv, Caps) ->
         {type_error, _Type} ->
             throw({type_error, pattern, P, Tuple, Ty})
     end;
-add_type_pat(Atom = {atom, P, Val}, Ty, TEnv, VEnv, _) ->
+add_type_pat(Atom = {atom, P, Val}, Ty, TEnv, VEnv) ->
     LitTy = {atom, erl_anno:new(0), Val},
     case subtype(LitTy, Ty, TEnv) of
         {true, Cs} ->
@@ -3816,7 +3816,7 @@ add_type_pat({bin, _P, BinElements} = Bin, Ty, TEnv, VEnv) ->
                     {VEnv, Cs1},
                     BinElements),
     {type(none), BinTy, NewVEnv, Cs};
-add_type_pat({record, P, Record, Fields}, Ty, TEnv, VEnv, Caps) ->
+add_type_pat({record, P, Record, Fields}, Ty, TEnv, VEnv) ->
     case expect_record_type(Ty, Record, TEnv) of
         any ->
             %% FIXME: If record() is used and we try to bind, every field types
@@ -3827,7 +3827,7 @@ add_type_pat({record, P, Record, Fields}, Ty, TEnv, VEnv, Caps) ->
                 ,union_var_binds([add_any_types_pat(Field, VEnv) || Field <- Fields], TEnv)
                 ,constraints:empty()};
         {fields_ty, Tys, Cs} ->
-            {PatTys, UBounds, VEnv1, Cs1} = add_type_pat_fields(Fields, Tys, TEnv, VEnv, Caps),
+            {PatTys, UBounds, VEnv1, Cs1} = add_type_pat_fields(Fields, Tys, TEnv, VEnv),
             {type_record(Record, PatTys)
                 ,type_record(Record, UBounds)
                 ,VEnv1
@@ -3925,25 +3925,25 @@ find_field_default([]) -> {var, erl_anno:new(0), '_'};
 find_field_default([{record_field, _, {var, _, '_'}, Exp}|_]) -> Exp;
 find_field_default([_|Fields]) -> find_field_default(Fields).
 
-add_type_pat_fields([], _, _TEnv, VEnv, _) ->
+add_type_pat_fields([], _, _TEnv, VEnv) ->
     {[], [], VEnv, constraints:empty()};
-add_type_pat_fields(Fields, Tys, TEnv, VEnv, Caps) ->
+add_type_pat_fields(Fields, Tys, TEnv, VEnv) ->
     %% Add every missing fields
     %% If an underscore field is present: use that expression as the default expression
     %% Otherwise, give an empty assignment of the field to underscore
     Default = find_field_default(Fields),
     AllFields = [ find_field_or_create(Fields, Name, Default) || ?typed_record_field(Name) <- Tys],
-    add_type_pat_fields(AllFields, Tys, TEnv, VEnv, [], [], [], Caps).
+    add_type_pat_fields(AllFields, Tys, TEnv, VEnv, [], [], []).
 
-add_type_pat_fields([], _, _TEnv, VEnv, PatTysAcc, UBoundsAcc, CsAcc, _) ->
+add_type_pat_fields([], _, _TEnv, VEnv, PatTysAcc, UBoundsAcc, CsAcc) ->
     {lists:reverse(PatTysAcc), lists:reverse(UBoundsAcc),
      VEnv, constraints:combine(CsAcc)};
 add_type_pat_fields([{record_field, _, {atom, _, _} = FieldWithAnno, Pat}|Fields],
-                    Record, TEnv, VEnv, PatTysAcc, UBoundsAcc, CsAcc, Caps) ->
+                    Record, TEnv, VEnv, PatTysAcc, UBoundsAcc, CsAcc) ->
     Ty = get_rec_field_type(FieldWithAnno, Record),
     NormTy = normalize(Ty, TEnv),
     {PatTyNorm, UBoundNorm, VEnv2, Cs1} =
-        ?throw_orig_type(add_type_pat(Pat, NormTy, TEnv, VEnv, Caps),
+        ?throw_orig_type(add_type_pat(Pat, NormTy, TEnv, VEnv),
                          Ty, NormTy),
     %% De-normalize the returned types if they are the type checked against.
     PatTy  = case PatTyNorm  of NormTy -> Ty;
@@ -3951,7 +3951,7 @@ add_type_pat_fields([{record_field, _, {atom, _, _} = FieldWithAnno, Pat}|Fields
     UBound = case UBoundNorm of NormTy -> Ty;
                  _      -> UBoundNorm end,
     add_type_pat_fields(Fields, Record, TEnv, VEnv2,
-                        [PatTy|PatTysAcc], [UBound|UBoundsAcc], [Cs1|CsAcc], Caps).
+                        [PatTy|PatTysAcc], [UBound|UBoundsAcc], [Cs1|CsAcc]).
 
 %% Given a pattern for a key, finds the matching association in the map type and
 %% returns the value type. Returns 'error' if the key is not valid in the map.
@@ -3963,7 +3963,7 @@ add_type_pat_fields([{record_field, _, {atom, _, _} = FieldWithAnno, Pat}|Fields
                            VEnv        :: #{atom() => type()}
                           ) -> {ok, ValueTy :: type(), constraints:constraints()} |
                                error.
-add_type_pat_map_key(_Key, any, _TEnv, _VEnv, _Caps) ->
+add_type_pat_map_key(_Key, any, _TEnv, _VEnv) ->
     {ok, type(any), constraints:empty()};
 add_type_pat_map_key(Key, [{type, _, AssocTag, [KeyTy, ValueTy]} | MapAssocs], TEnv, VEnv)
   when AssocTag == map_field_exact; AssocTag == map_field_assoc ->

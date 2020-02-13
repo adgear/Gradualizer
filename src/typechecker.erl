@@ -2206,6 +2206,8 @@ do_type_check_expr_in(Env, ResTy, {record_field, Anno, Expr, Name, FieldWithAnno
                                 {VarType, lists:nth(FieldIndex-1, RefinedFields)};
                             {var, _, _} ->
                                 {type_record(Name), FieldTy};
+                            ?type(any) ->
+                                {type_record(Name), FieldTy};
                             _ ->
                                 throw({type_error, mismatch, type_record(Name), Expr})
                         end;

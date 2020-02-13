@@ -39,3 +39,9 @@ underscore(#underscore{a = A, b = B, c = C}) -> A + B + C.
 -record(type_var, {f :: integer()}).
 -spec type_var([#type_var{}]) -> [integer()].
 type_var(Rs) -> lists:map(fun (R) -> R#type_var.f end, Rs).
+
+-record(any, {f :: integer()}).
+without_spec(R) -> with_spec(R#any.f).
+
+-spec with_spec(integer()) -> integer().
+with_spec(I) -> I + 1.
